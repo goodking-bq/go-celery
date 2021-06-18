@@ -1,0 +1,6 @@
+broker_url: redis://
+my: bbb
+queues:
+  - a
+  - b
+  - c

@@ -2,9 +2,12 @@ package celery
 
 import (
 	"context"
+	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"github.com/goodking-bq/go-celery/backends"
 	"github.com/goodking-bq/go-celery/brokers"
 	"github.com/goodking-bq/go-celery/message"
+	"github.com/spf13/viper"
 	"sync"
 	"time"
 )
@@ -38,9 +41,38 @@ func NewCelery(config *Config) (*Celery, error) {
 		tasks:           sync.Map{},
 	}
 	app.worker = worker
-	ctx := Context{}
-	ctx.Context = context.WithValue(ctx, "backend", backend)
+	app.ctx = Context{App: app}
 	return app, nil
+}
+
+// NewCeleryWithConfigFile create celery app use config file
+func NewCeleryWithConfigFile(file string, conf ...interface{}) (*Celery, error) {
+	celeryConf := DefaultConfig()
+	viper.SetConfigFile(file)
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("Fatal error config file: %s \n", err))
+	}
+	var vUnmarshal = func(celeryConf *Config, conf ...interface{}) {
+		// save config file value to celery config
+		if err := viper.Unmarshal(celeryConf); err != nil {
+			panic(fmt.Errorf("unmarshal conf failed, err:%s \n", err))
+		}
+		// save config file value to custom config
+		for _, v := range conf {
+			if err := viper.Unmarshal(v); err != nil {
+				panic(fmt.Errorf("unmarshal conf failed, err:%s \n", err))
+			}
+		}
+	}
+	vUnmarshal(celeryConf, conf...)
+	// watch config file
+	viper.WatchConfig()
+	viper.OnConfigChange(func(in fsnotify.Event) {
+		fmt.Printf("config file <%s> is changed...", file)
+		vUnmarshal(celeryConf, conf...)
+	})
+	return NewCelery(celeryConf)
 }
 
 func (c *Celery) Context() Context {
@@ -122,6 +154,7 @@ func (c *Celery) RegisterTask(task *celeryTask) {
 
 type Context struct {
 	context.Context
+	App *Celery
 }
 
 // SetStatus can set custom status when a task call in

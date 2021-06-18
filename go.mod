@@ -3,6 +3,7 @@ module github.com/goodking-bq/go-celery
 go 1.16
 
 require (
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
