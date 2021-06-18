@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gomodule/redigo/redis"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery/message"
+	"github.com/goodking-bq/go-celery/message"
 )
 
 type RedisBackend struct {

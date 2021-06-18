@@ -7,7 +7,7 @@ package brokers
 import (
 	"encoding/json"
 	"fmt"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery/message"
+	"github.com/goodking-bq/go-celery/message"
 	"time"
 
 	"github.com/streadway/amqp"

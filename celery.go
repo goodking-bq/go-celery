@@ -2,9 +2,9 @@ package celery
 
 import (
 	"context"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery/backends"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery/brokers"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery/message"
+	"github.com/goodking-bq/go-celery/backends"
+	"github.com/goodking-bq/go-celery/brokers"
+	"github.com/goodking-bq/go-celery/message"
 	"sync"
 	"time"
 )

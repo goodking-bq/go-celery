@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"github.com/goodking-bq/go-celery"
 	"github.com/spf13/cobra"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery"
 	"runtime"
 )
 

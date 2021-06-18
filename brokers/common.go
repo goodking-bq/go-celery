@@ -2,8 +2,8 @@ package brokers
 
 import (
 	"errors"
+	"github.com/goodking-bq/go-celery/message"
 	"github.com/streadway/amqp"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery/message"
 	"log"
 	"strings"
 )

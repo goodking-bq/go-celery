@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"github.com/goodking-bq/go-celery"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"gitlab.kube.2xi.com/yunwei/platform-backend-tasks/celery"
 	"os"
 )
 
