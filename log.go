@@ -54,20 +54,19 @@ func NewLog(cfg logConfig) *zap.Logger {
 		return lvl >= level
 	})
 
-	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),                                        // 编码器配置
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), zapcore.AddSync(&hook)), // 打印到控制台和文件
-		loggerLevel, // 日志级别
+	// 最后创建具体的Logger
+	core := zapcore.NewTee(
+		zapcore.NewCore(zapcore.NewConsoleEncoder(encoderConfig), zapcore.AddSync(os.Stdout), loggerLevel), //打印到控制台
+		zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&hook), loggerLevel),
 	)
-
 	// 开启开发模式，堆栈跟踪
-	caller := zap.AddCaller()
+	//caller := zap.AddCaller()
 	// 开启文件及行号
-	development := zap.Development()
+	//development := zap.Development()
 	// 设置初始化字段
 	filed := zap.Fields(zap.String("serviceName", "serviceName"))
 	// 构造日志
-	logger := zap.New(core, caller, development, filed)
+	logger := zap.New(core, filed)
 
 	logger.Info("log 初始化成功")
 	return logger
