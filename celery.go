@@ -46,7 +46,7 @@ func NewCelery(config *Config) (*Celery, error) {
 }
 
 // NewCeleryWithConfigFile create celery app use config file
-func NewCeleryWithConfigFile(file string, conf ...interface{}) (*Celery, error) {
+func NewCeleryWithConfigFile(file string, custom ...interface{}) (*Celery, error) {
 	celeryConf := DefaultConfig()
 	viper.SetConfigFile(file)
 	err := viper.ReadInConfig()
@@ -65,12 +65,12 @@ func NewCeleryWithConfigFile(file string, conf ...interface{}) (*Celery, error) 
 			}
 		}
 	}
-	vUnmarshal(celeryConf, conf...)
+	vUnmarshal(celeryConf, custom...)
 	// watch config file
 	viper.WatchConfig()
 	viper.OnConfigChange(func(in fsnotify.Event) {
 		fmt.Printf("config file <%s> is changed...", file)
-		vUnmarshal(celeryConf, conf...)
+		vUnmarshal(celeryConf, custom...)
 	})
 	return NewCelery(celeryConf)
 }
@@ -79,14 +79,23 @@ func (c *Celery) Context() Context {
 	return c.ctx
 }
 
-// Register register a task with name and func
-func (c *Celery) Register(name string, task interface{}) {
-	c.worker.Register(name, task)
+// RegisterFun register a task with name and func
+func (c *Celery) RegisterFun(name string, f interface{}) {
+	task := NewTask(name, f)
+	c.worker.Register(task)
 }
 
 func (c *Celery) Delay(name string, args ...interface{}) (*message.AsyncResult, error) {
 	task := message.GetTaskMessage()
 	task.Args = args
+	task.Task = name
+	task.Kwargs = map[string]interface{}{}
+	return c.delay(task)
+}
+func (c *Celery) DelayKwargs(name string, kwargs map[string]interface{}) (*message.AsyncResult, error) {
+	task := message.GetTaskMessage()
+	task.Args = []interface{}{}
+	task.Kwargs = kwargs
 	task.Task = name
 	return c.delay(task)
 }
@@ -136,20 +145,8 @@ func (c *Celery) StartBeat() {
 	c.beat.Start()
 }
 
-// CeleryTask is an interface that represents actual task
-// Passing CeleryTask interface instead of function pointer
-// avoids reflection and may have performance gain.
-// ResultMessage must be obtained using GetResultMessage()
-type CeleryTask interface {
-	// ParseKwargs - define a method to parse kwargs
-	ParseKwargs(map[string]interface{}) error
-
-	// RunTask - define a method for execution
-	RunTask() (interface{}, error)
-}
-
-func (c *Celery) RegisterTask(task *celeryTask) {
-	c.worker.Register(task.Name, task)
+func (c *Celery) Register(task *Task) {
+	c.worker.Register(task)
 }
 
 type Context struct {

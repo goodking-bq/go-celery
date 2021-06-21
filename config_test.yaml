@@ -1,6 +1,5 @@
 broker_url: redis://
+backend_url: redis://
 my: bbb
 queues:
-  - a
-  - b
-  - c
+  - celery

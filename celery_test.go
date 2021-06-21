@@ -2,8 +2,8 @@ package celery
 
 import (
 	"context"
-	"reflect"
 	"testing"
+	"time"
 )
 
 func TestContext(t *testing.T) {
@@ -12,16 +12,39 @@ func TestContext(t *testing.T) {
 	t.Log(ctx.Value("zabbix").(string))
 }
 
-func TestNewCeleryWithConfigFile(t *testing.T) {
+func newApp() *Celery {
 	type MyConfig struct {
 		My string `json:"my"`
 	}
 	conf := &MyConfig{}
 	app, err := NewCeleryWithConfigFile("./config_test.yaml", conf)
 	if err != nil {
-		println(err.Error())
+		panic(err)
 	}
-	task := Task("add", func(a, b int) int { return a + b }).
-		WithCtx().WithKW("a", reflect.Int).WithKW("b", reflect.Int)
-	app.RegisterTask(task)
+	task := NewTask("worker.add", func(a, b int) int {
+		_ = a / b //test panic
+		return a + b
+	}).
+		WithCtx().WithKwargs("a", "b")
+	app.Register(task)
+	return app
+}
+func TestNewCeleryWithConfigFile(t *testing.T) {
+	app := newApp()
+	app.StartWorkerForever()
+}
+
+func TestCelery_Delay(t *testing.T) {
+	app := newApp()
+	task, err := app.DelayKwargs("worker.add", map[string]interface{}{"a": 1, "b": 2}) // app.Delay("worker.add", 1, 0)
+
+	if err != nil {
+		t.Error(err)
+	}
+	if err := task.Wait(1 * time.Second); err != nil {
+		t.Error(err)
+	}
+	if task.Successful() == false {
+		t.Error(task.Get(1 * time.Second))
+	}
 }

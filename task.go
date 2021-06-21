@@ -2,59 +2,45 @@ package celery
 
 import (
 	"context"
-	"reflect"
 )
 
-type Kwarg struct {
-	Name string
-	T    reflect.Kind
-}
-
-type Kwargs struct {
-	Values map[string]interface{}
-	Types  []Kwarg
-}
-
-func (kw *Kwargs) Get(name string) {
-
-}
-
-type celeryTask struct {
+type Task struct {
 	Name    string
-	Kwargs  Kwargs
+	Kwargs  []string
 	Func    interface{}
 	Ctx     bool
 	Context Context
 }
 
 // WithCtx set call func with celery.Context as first params like add(ctx celery.Context,a,b int)
-func (t *celeryTask) WithCtx() *celeryTask {
+// celery.Context context.Context
+func (t *Task) WithCtx() *Task {
 	t.Ctx = true
 	return t
 }
 
-func (t *celeryTask) WithValue(name string, value interface{}) *celeryTask {
+// WithValue when use WithCtx, you can use this,c
+func (t *Task) WithValue(name string, value interface{}) *Task {
 	t.Context.Context = context.WithValue(t.Context, name, value)
 	return t
 }
 
-func (t *celeryTask) WithKW(name string, kwType reflect.Kind) *celeryTask {
-	kw := Kwarg{
-		Name: name,
-		T:    kwType,
-	}
-	t.Kwargs.Types = append(t.Kwargs.Types, kw)
+// WithKwargs set kwargs ,can call func like python kwargs
+/*
+example:
+	add.apply_async(args=(1,), kwargs={"b": 2878}, serializer='json')
+*/
+func (t *Task) WithKwargs(kws ...string) *Task {
+	t.Kwargs = kws
 	return t
 }
 
-func Task(name string, f interface{}) *celeryTask {
-	return &celeryTask{
-		Name: name,
-		Func: f,
-		Ctx:  false,
-		Kwargs: Kwargs{
-			Values: map[string]interface{}{},
-			Types:  []Kwarg{},
-		},
+// NewTask new Task with name and func
+func NewTask(name string, f interface{}) *Task {
+	return &Task{
+		Name:   name,
+		Func:   f,
+		Ctx:    false,
+		Kwargs: []string{},
 	}
 }

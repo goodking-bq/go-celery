@@ -1,6 +1,7 @@
 package celery
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/goodking-bq/go-celery/message"
@@ -19,10 +20,10 @@ type Worker struct {
 	rateLimitPeriod time.Duration
 	Concurrency     int `json:"concurrency"`
 	tasks           sync.Map
-}
-
-func (w *Worker) Register(name string, task interface{}) {
-	w.tasks.Store(name, task)
+	// run funcs before run task
+	beforeRun []func()
+	// run after run task
+	afterRun []func()
 }
 
 func (w *Worker) PrintInfo() {
@@ -121,45 +122,38 @@ func (w *Worker) RunTask(msg *message.TaskMessage) (*message.CeleryResultMessage
 	if task == nil {
 		return nil, fmt.Errorf("task %s is not registered", msg.Task)
 	}
-
-	// convert to task interface
-	taskInterface, ok := task.(CeleryTask)
-	if ok {
-		if err := taskInterface.ParseKwargs(msg.Kwargs); err != nil {
-			return nil, err
-		}
-		val, err := taskInterface.RunTask()
-		if err != nil {
-			return nil, err
-		}
-		return message.GetResultMessage(val), err
-	}
-
 	// use reflection to execute function ptr
-	taskFunc := reflect.ValueOf(task)
-	return runTaskFunc(&taskFunc, msg)
+	//taskFunc := reflect.ValueOf(task)
+	return runTask(task, msg)
 }
 
-// GetTask retrieves registered task
-func (w *Worker) GetTask(name string) interface{} {
-	t, ok := w.tasks.Load(name)
-	if !ok {
-		return nil
-	}
-	return t
-}
+// runTask runTask
+/* about task args:
+args from message.TaskMessage where Args and Kwargs
+args=[Args...,Kwargs...]
+if len(task args)==(msg.Args) ,then msg.Kwargs will drop
 
-func runTaskFunc(taskFunc *reflect.Value, msg *message.TaskMessage) (*message.CeleryResultMessage, error) {
+*/
 
+func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMessage, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var buf [4096]byte
+			var s bytes.Buffer
+			n := runtime.Stack(buf[:], false) //为什么一定要buf[:]
+			s.Write(buf[:n])
+			crm = message.GetResultMessage(r)
+			crm.Status = "FAILURE"
+			crm.Result = map[string]interface{}{"exc_type": "Exception", "exc_message": []string{fmt.Sprintf("%s", r)}, "exc_module": "runTask"}
+			crm.Traceback = fmt.Sprintf("%s", s.String())
+		}
+	}()
+	taskFunc := reflect.ValueOf(task.Func)
 	// check number of arguments
 	numArgs := taskFunc.Type().NumIn()
-	messageNumArgs := len(msg.Args)
-	if numArgs != messageNumArgs {
-		return nil, fmt.Errorf("Number of task arguments %d does not match number of message arguments %d", numArgs, messageNumArgs)
-	}
-
+	numMsgArgs := len(msg.Args)
 	// construct arguments
-	in := make([]reflect.Value, messageNumArgs)
+	in := make([]reflect.Value, numArgs)
 	for i, arg := range msg.Args {
 		origType := taskFunc.Type().In(i).Kind()
 		msgType := reflect.TypeOf(arg).Kind()
@@ -171,15 +165,46 @@ func runTaskFunc(taskFunc *reflect.Value, msg *message.TaskMessage) (*message.Ce
 		if origType == reflect.Float32 && msgType == reflect.Float64 {
 			arg = float32(arg.(float64))
 		}
-
 		in[i] = reflect.ValueOf(arg)
 	}
-
+	if numMsgArgs < numArgs {
+		if len(msg.Kwargs) == numArgs {
+			for i := numMsgArgs; i < numArgs; i++ {
+				origType := taskFunc.Type().In(i).Kind()
+				arg := msg.Kwargs[task.Kwargs[i]]
+				msgType := reflect.TypeOf(arg).Kind()
+				if origType == reflect.Int && msgType == reflect.Float64 {
+					arg = int(arg.(float64))
+				}
+				if origType == reflect.Float32 && msgType == reflect.Float64 {
+					arg = float32(arg.(float64))
+				}
+				in[i] = reflect.ValueOf(arg)
+			}
+		}
+	}
 	// call method
 	res := taskFunc.Call(in)
 	if len(res) == 0 {
 		return nil, nil
 	}
+	crm = message.GetReflectionResultMessage(&res[0])
+	return
+}
 
-	return message.GetReflectionResultMessage(&res[0]), nil
+// GetTask retrieves registered task
+func (w *Worker) GetTask(name string) *Task {
+	t, ok := w.tasks.Load(name)
+	if !ok {
+		return nil
+	}
+	task, ok := t.(*Task)
+	if !ok {
+		return nil
+	}
+	return task
+}
+
+func (w *Worker) Register(task *Task) {
+	w.tasks.Store(task.Name, task)
 }
