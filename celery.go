@@ -145,8 +145,10 @@ func (c *Celery) StartBeat() {
 	c.beat.Start()
 }
 
-func (c *Celery) Register(task *Task) {
-	c.worker.Register(task)
+func (c *Celery) Register(tasks ...*Task) {
+	for _, task := range tasks {
+		c.worker.Register(task)
+	}
 }
 
 type Context struct {
