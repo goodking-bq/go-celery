@@ -53,7 +53,7 @@ func (w *Worker) PrintInfo() {
 
 // StartWorker starts celery workers
 func (w *Worker) StartWorker() {
-	w.PrintInfo()
+	//w.PrintInfo()
 	w.StartWorkerWithContext(context.Background())
 }
 
