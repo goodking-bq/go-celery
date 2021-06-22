@@ -6,73 +6,77 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 	"os"
 	"path"
+	"strings"
+	"time"
 )
 
 var (
-	L *zap.Logger
-)
-
-func NewLog(cfg logConfig) *zap.Logger {
-	fileName := path.Join(cfg.Path, cfg.File)
-	hook := lumberjack.Logger{
-		Filename:   fileName, // 日志文件路径
-		MaxSize:    128,      // 每个日志文件保存的最大尺寸 单位：M
-		MaxBackups: 30,       // 日志文件最多保存多少个备份
-		MaxAge:     7,        // 文件最多保存多少天
-		Compress:   true,     // 是否压缩
+	L        *zap.SugaredLogger
+	levelMap = map[string]zapcore.Level{
+		"debug":  zapcore.DebugLevel,
+		"info":   zapcore.InfoLevel,
+		"warn":   zapcore.WarnLevel,
+		"error":  zapcore.ErrorLevel,
+		"dpanic": zapcore.DPanicLevel,
+		"panic":  zapcore.PanicLevel,
+		"fatal":  zapcore.FatalLevel,
 	}
-
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "file",
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,  // 小写编码器
-		EncodeTime:     zapcore.ISO8601TimeEncoder,     // ISO8601 UTC 时间格式
-		EncodeDuration: zapcore.SecondsDurationEncoder, //
-		EncodeCaller:   zapcore.ShortCallerEncoder,     // 全路径编码器
+	encoderConfig = zapcore.EncoderConfig{
+		TimeKey:       "time",
+		LevelKey:      "level",
+		NameKey:       "logger",
+		CallerKey:     "file",
+		MessageKey:    "msg",
+		StacktraceKey: "stacktrace",
+		LineEnding:    zapcore.DefaultLineEnding,
+		EncodeLevel:   zapcore.LowercaseLevelEncoder,
+		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.Format("2006-01-02 15:04:05"))
+		},
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
 		EncodeName:     zapcore.FullNameEncoder,
 	}
-	var level zapcore.Level
-	switch cfg.Level {
-	case "debug", "DEBUG":
-		level = zap.DebugLevel
-	case "info", "INFO":
-		level = zap.InfoLevel
-	case "warn", "WARN":
-		level = zap.WarnLevel
-	case "error", "ERROR":
-		level = zap.ErrorLevel
-	case "panic", "PANIC":
-		level = zap.DPanicLevel
+)
+
+func toLevel(lev string) zapcore.Level {
+	if level, ok := levelMap[strings.ToLower(lev)]; ok {
+		return level
 	}
+	return zapcore.InfoLevel
+}
+
+func NewLog(appName string, cfg logConfig) *zap.SugaredLogger {
+	fileName := path.Join(cfg.Path, cfg.File)
+	hook := lumberjack.Logger{
+		Filename:   fileName,
+		MaxSize:    128,
+		MaxBackups: 30,
+		MaxAge:     7,
+		Compress:   true,
+	}
+
+	level := toLevel(cfg.Level)
 
 	loggerLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		return lvl >= level
 	})
 
-	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),                                        // 编码器配置
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), zapcore.AddSync(&hook)), // 打印到控制台和文件
-		loggerLevel, // 日志级别
+	core := zapcore.NewTee(
+		zapcore.NewCore(zapcore.NewConsoleEncoder(encoderConfig), zapcore.AddSync(os.Stdout), loggerLevel),
+		zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&hook), loggerLevel),
 	)
 
-	// 开启开发模式，堆栈跟踪
-	caller := zap.AddCaller()
-	// 开启文件及行号
-	development := zap.Development()
-	// 设置初始化字段
-	filed := zap.Fields(zap.String("serviceName", "serviceName"))
-	// 构造日志
-	logger := zap.New(core, caller, development, filed)
+	fileds := zap.Fields(zap.String("app", appName))
 
-	logger.Info("log 初始化成功")
-	return logger
+	logger := zap.New(core, zap.AddCaller(), fileds)
+
+	logger.Info("log inited.")
+	l := logger.Sugar()
+	defer logger.Sync()
+	return l
 }
 
-func GetLogger() *zap.Logger {
+func GetLogger() *zap.SugaredLogger {
 	return L
 }

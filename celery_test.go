@@ -26,7 +26,6 @@ func newApp() *Celery {
 		return a + b
 	}).WithKwargs("a", "b")
 	taskCtx := NewTask("worker.add_ctx", func(ctx Context, a, b int) int {
-		println(ctx.App.Config.BrokerUrl)
 		println(ctx.Value("custom").(string))
 		return a + b
 	}).WithValue("custom", "this is ctx").WithCtx().WithKwargs("a", "b")
@@ -40,7 +39,11 @@ func TestNewCeleryWithConfigFile(t *testing.T) {
 
 func TestCelery_Delay(t *testing.T) {
 	app := newApp()
-	task, err := app.DelayKwargs("worker.add_ctx", map[string]interface{}{"a": 1, "b": 2}) // app.Delay("worker.add", 1, 0)
+	task, err := app.Delay("worker.add",
+		Args(1),
+		//Kwargs("a", 1, "b", 2),
+		KwargsMap(map[string]interface{}{"a": 1, "b": 2}),
+	)
 
 	if err != nil {
 		t.Error(err)
@@ -50,5 +53,8 @@ func TestCelery_Delay(t *testing.T) {
 	}
 	if task.Successful() == false {
 		t.Error(task.Get(1 * time.Second))
+	} else {
+
+		t.Logf("worker.add_ctx(1,2)=%f", task.Result())
 	}
 }

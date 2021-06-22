@@ -284,6 +284,10 @@ func (r *AsyncResult) Successful() bool {
 	return false
 }
 
+func (r *AsyncResult) Result() interface{} {
+	return r.result.Result
+}
+
 // TaskMessage is celery-compatible message
 type TaskMessage struct {
 	ID      string                 `json:"id"`
@@ -293,6 +297,7 @@ type TaskMessage struct {
 	Retries int                    `json:"retries"`
 	ETA     *string                `json:"eta"`
 	Expires *CeleryTime            `json:"expires"`
+	Lang    string                 `json:"lang"`
 }
 
 func (tm *TaskMessage) reset() {
@@ -316,6 +321,7 @@ var taskMessagePool = sync.Pool{
 			Retries: 0,
 			Kwargs:  nil,
 			ETA:     &eta,
+			Lang:    "golang",
 		}
 	},
 }
