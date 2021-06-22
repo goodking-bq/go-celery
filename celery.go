@@ -8,6 +8,7 @@ import (
 	"github.com/goodking-bq/go-celery/brokers"
 	"github.com/goodking-bq/go-celery/message"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 )
@@ -15,6 +16,7 @@ import (
 type Celery struct {
 	Broker  brokers.Broker
 	Backend backends.Backend
+	Log     *zap.Logger
 	Config  *Config
 	worker  *Worker
 	beat    *Beat
@@ -25,6 +27,8 @@ type Celery struct {
 
 // NewCelery create celery app
 func NewCelery(config *Config) (*Celery, error) {
+	logger := NewLog(config.Log)
+
 	broker, err := brokers.NewBroker(config.BrokerUrl, config.Queues)
 	if err != nil {
 		return nil, err
@@ -33,13 +37,17 @@ func NewCelery(config *Config) (*Celery, error) {
 	if err != nil {
 		return nil, err
 	}
-	app := &Celery{Config: config, Broker: broker, Backend: backend}
+	app := &Celery{Config: config, Broker: broker,
+		Backend: backend,
+		Log:     logger,
+	}
 	worker := &Worker{
 		App:             app,
 		rateLimitPeriod: 1 * time.Second,
 		Concurrency:     config.Concurrency,
 		tasks:           sync.Map{},
 	}
+	worker.PrintInfo()
 	app.worker = worker
 	app.ctx = Context{App: app}
 	return app, nil
