@@ -1,8 +1,7 @@
 from celery import Celery
 
 app = Celery(
-    broker="amqp://platform:www.52xiyou.com@kube.2xi.com:25672/test",
-    # broker="redis://",
+    broker="redis://",
     backend="redis://"
 )
 
