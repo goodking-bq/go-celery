@@ -14,9 +14,10 @@ import (
 )
 
 type Celery struct {
+	name    string
 	Broker  brokers.Broker
 	Backend backends.Backend
-	Log     *zap.Logger
+	Log     *zap.SugaredLogger
 	Config  *Config
 	worker  *Worker
 	beat    *Beat
@@ -27,8 +28,7 @@ type Celery struct {
 
 // NewCelery create celery app
 func NewCelery(config *Config) (*Celery, error) {
-	logger := NewLog(config.Log)
-
+	logger := NewLog(config.Name, config.Log)
 	broker, err := brokers.NewBroker(config.BrokerUrl, config.Queues)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func NewCelery(config *Config) (*Celery, error) {
 		Concurrency:     config.Concurrency,
 		tasks:           sync.Map{},
 	}
-	worker.PrintInfo()
+
 	app.worker = worker
 	app.ctx = Context{App: app}
 	return app, nil
@@ -87,28 +87,28 @@ func (c *Celery) Context() Context {
 	return c.ctx
 }
 
-// RegisterFun register a task with name and func
-func (c *Celery) RegisterFun(name string, f interface{}) {
+// RegisterFunc register a task with name and func
+func (c *Celery) RegisterFunc(name string, f interface{}) {
 	task := NewTask(name, f)
 	c.worker.Register(task)
 }
 
-func (c *Celery) Delay(name string, args ...interface{}) (*message.AsyncResult, error) {
-	task := message.GetTaskMessage()
-	task.Args = args
-	task.Task = name
-	task.Kwargs = map[string]interface{}{}
-	return c.delay(task)
-}
-func (c *Celery) DelayKwargs(name string, kwargs map[string]interface{}) (*message.AsyncResult, error) {
-	task := message.GetTaskMessage()
-	task.Args = []interface{}{}
-	task.Kwargs = kwargs
-	task.Task = name
-	return c.delay(task)
+type Delayer interface {
+	apply(t *message.TaskMessage, op *TaskOptions)
 }
 
-func (c *Celery) delay(task *message.TaskMessage) (*message.AsyncResult, error) {
+// Delay call task
+func (c *Celery) Delay(name string, fs ...Delayer) (*message.AsyncResult, error) {
+	task := message.GetTaskMessage()
+	task.Task = name
+	options := EmptyTaskOptions()
+	for _, f := range fs {
+		f.apply(task, options)
+	}
+	return c.delay(task, EmptyTaskOptions())
+}
+
+func (c *Celery) delay(task *message.TaskMessage, options *TaskOptions) (*message.AsyncResult, error) {
 	defer message.ReleaseTaskMessage(task)
 	var encodeFun func(taskMessage *message.TaskMessage) (string, error)
 	celeryMessage := message.GetCeleryMessage("")
@@ -144,25 +144,44 @@ func (c *Celery) StartWorker() {
 	c.worker.StartWorker()
 }
 
-// StartWorkerForever starts celery workers
+// StartWorkerForever starts celery workers forever
 func (c *Celery) StartWorkerForever() {
-	c.worker.StartWorkerForever()
+	c.worker.StartWorker()
+	forever := make(chan bool)
+	<-forever
 }
 
 func (c *Celery) StartBeat() {
 	c.beat.Start()
 }
 
-func (c *Celery) Register(task *Task) {
-	c.worker.Register(task)
+func (c *Celery) Register(tasks ...*Task) {
+	for _, task := range tasks {
+		if task.Ctx == true {
+			task.Context.App = c
+		}
+		c.worker.Register(task)
+	}
 }
 
 type Context struct {
 	context.Context
+	Msg *message.TaskMessage
 	App *Celery
 }
 
 // SetStatus can set custom status when a task call in
 func (ctx Context) SetStatus(status string) {
+	resMsg := message.GetResultMessage(nil)
+	resMsg.TaskId = ctx.Msg.ID
+	resMsg.Status = status
+	err := ctx.App.Backend.SetResult(ctx.Msg.ID, resMsg)
+	if err != nil {
+		ctx.App.Log.With(zap.String("task_id", resMsg.TaskId)).Errorf("set task status error: %s", err.Error())
+	}
+}
+
+// Retry retry task
+func (ctx Context) Retry() {
 
 }

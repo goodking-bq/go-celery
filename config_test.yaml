@@ -3,3 +3,7 @@ backend_url: redis://
 my: bbb
 queues:
   - celery
+log:
+  path: ./logs
+  file: celery
+  level: info

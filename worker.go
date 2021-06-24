@@ -53,7 +53,7 @@ func (w *Worker) PrintInfo() {
 
 // StartWorker starts celery workers
 func (w *Worker) StartWorker() {
-	//w.PrintInfo()
+	w.PrintInfo()
 	w.StartWorkerWithContext(context.Background())
 }
 
@@ -81,7 +81,7 @@ func (w *Worker) StartWorkerWithContext(ctx context.Context) {
 					// run task
 					resultMsg, err := w.RunTask(celeryMessage)
 					if err != nil {
-						log.Printf("failed to run task message %s: %+v", celeryMessage.ID, err)
+						w.App.Log.Errorf("failed to run task message %s: %+v", celeryMessage.ID, err)
 						continue
 					}
 					// push result to backend
@@ -95,13 +95,6 @@ func (w *Worker) StartWorkerWithContext(ctx context.Context) {
 			}
 		}(i)
 	}
-}
-
-// StartWorkerForever starts celery workers forever
-func (w *Worker) StartWorkerForever() {
-	w.StartWorker()
-	forever := make(chan bool)
-	<-forever
 }
 
 // RunTask runs celery task
@@ -127,14 +120,12 @@ func (w *Worker) RunTask(msg *message.TaskMessage) (*message.CeleryResultMessage
 	return runTask(task, msg)
 }
 
-// runTask runTask
-/* about task args:
-args from message.TaskMessage where Args and Kwargs
-args=[Args...,Kwargs...]
-if len(task args)==(msg.Args) ,then msg.Kwargs will drop
-
-*/
-
+// runTask run task
+// about task args:
+//args from message.TaskMessage where Args and Kwargs
+//args=[Args...,Kwargs...]
+//if len(task args)==(msg.Args) ,then msg.Kwargs will drop
+//
 func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMessage, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -144,7 +135,11 @@ func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMes
 			s.Write(buf[:n])
 			crm = message.GetResultMessage(r)
 			crm.Status = "FAILURE"
-			crm.Result = map[string]interface{}{"exc_type": "Exception", "exc_message": []string{fmt.Sprintf("%s", r)}, "exc_module": "runTask"}
+			if msg.Lang == "py" {
+				crm.Result = map[string]interface{}{"exc_type": "Exception", "exc_message": []string{fmt.Sprintf("%s", r)}, "exc_module": "runTask"}
+			} else {
+				crm.Result = fmt.Sprintf("%s", r)
+			}
 			crm.Traceback = fmt.Sprintf("%s", s.String())
 		}
 	}()
@@ -153,9 +148,16 @@ func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMes
 	numArgs := taskFunc.Type().NumIn()
 	numMsgArgs := len(msg.Args)
 	// construct arguments
-	in := make([]reflect.Value, numArgs)
+	var in []reflect.Value
+	in = make([]reflect.Value, numArgs)
+	withCtx := 0
+	if task.Ctx == true {
+		task.Context.Msg = msg
+		in[0] = reflect.ValueOf(task.Context)
+		withCtx = 1
+	}
 	for i, arg := range msg.Args {
-		origType := taskFunc.Type().In(i).Kind()
+		origType := taskFunc.Type().In(i + withCtx).Kind()
 		msgType := reflect.TypeOf(arg).Kind()
 		// special case - convert float64 to int if applicable
 		// this is due to json limitation where all numbers are converted to float64
@@ -165,13 +167,13 @@ func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMes
 		if origType == reflect.Float32 && msgType == reflect.Float64 {
 			arg = float32(arg.(float64))
 		}
-		in[i] = reflect.ValueOf(arg)
+		in[i+withCtx] = reflect.ValueOf(arg)
 	}
-	if numMsgArgs < numArgs {
-		if len(msg.Kwargs) == numArgs {
-			for i := numMsgArgs; i < numArgs; i++ {
+	if numMsgArgs < numArgs-withCtx {
+		if len(msg.Kwargs) == numArgs-withCtx {
+			for i := numMsgArgs + withCtx; i < numArgs; i++ {
 				origType := taskFunc.Type().In(i).Kind()
-				arg := msg.Kwargs[task.Kwargs[i]]
+				arg := msg.Kwargs[task.Kwargs[i-withCtx]]
 				msgType := reflect.TypeOf(arg).Kind()
 				if origType == reflect.Int && msgType == reflect.Float64 {
 					arg = int(arg.(float64))
@@ -190,6 +192,23 @@ func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMes
 	}
 	crm = message.GetReflectionResultMessage(&res[0])
 	return
+}
+
+func recoverTask(t *message.TaskMessage, crm *message.CeleryResultMessage, err error) {
+	if r := recover(); r != nil {
+		var buf [4096]byte
+		var s bytes.Buffer
+		n := runtime.Stack(buf[:], false) //为什么一定要buf[:]
+		s.Write(buf[:n])
+		crm = message.GetResultMessage(r)
+		crm.Status = "FAILURE"
+		if t.Lang == "py" {
+			crm.Result = map[string]interface{}{"exc_type": "Exception", "exc_message": []string{fmt.Sprintf("%s", r)}, "exc_module": "runTask"}
+		} else {
+			crm.Result = fmt.Sprintf("%s", r)
+		}
+		crm.Traceback = fmt.Sprintf("%s", s.String())
+	}
 }
 
 // GetTask retrieves registered task
