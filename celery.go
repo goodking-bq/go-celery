@@ -8,9 +8,8 @@ import (
 	"github.com/goodking-bq/go-celery/brokers"
 	"github.com/goodking-bq/go-celery/message"
 	"github.com/spf13/viper"
+	"github.com/streadway/amqp"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 type Celery struct {
@@ -41,12 +40,7 @@ func NewCelery(config *Config) (*Celery, error) {
 		Backend: backend,
 		Log:     logger,
 	}
-	worker := &Worker{
-		App:             app,
-		rateLimitPeriod: 1 * time.Second,
-		Concurrency:     config.Concurrency,
-		tasks:           sync.Map{},
-	}
+	worker := NewWorker(app)
 
 	app.worker = worker
 	app.ctx = Context{App: app}
@@ -162,6 +156,10 @@ func (c *Celery) Register(tasks ...*Task) {
 		}
 		c.worker.Register(task)
 	}
+}
+
+func (c *Celery) SetQueues(queue amqp.Queue) {
+
 }
 
 type Context struct {

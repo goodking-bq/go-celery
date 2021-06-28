@@ -21,7 +21,7 @@ var (
 		"panic":  zapcore.PanicLevel,
 		"fatal":  zapcore.FatalLevel,
 	}
-	encoderConfig = zapcore.EncoderConfig{
+	consoleEncoderConfig = zapcore.EncoderConfig{
 		TimeKey:       "time",
 		LevelKey:      "level",
 		NameKey:       "logger",
@@ -29,7 +29,23 @@ var (
 		MessageKey:    "msg",
 		StacktraceKey: "stacktrace",
 		LineEnding:    zapcore.DefaultLineEnding,
-		EncodeLevel:   zapcore.LowercaseLevelEncoder,
+		EncodeLevel:   zapcore.CapitalColorLevelEncoder,
+		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.Format("2006-01-02 15:04:05"))
+		},
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+		EncodeName:     zapcore.FullNameEncoder,
+	}
+	jsonEncoderConfig = zapcore.EncoderConfig{
+		TimeKey:       "time",
+		LevelKey:      "level",
+		NameKey:       "logger",
+		CallerKey:     "file",
+		MessageKey:    "msg",
+		StacktraceKey: "stacktrace",
+		LineEnding:    zapcore.DefaultLineEnding,
+		EncodeLevel:   zapcore.CapitalLevelEncoder,
 		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 			enc.AppendString(t.Format("2006-01-02 15:04:05"))
 		},
@@ -63,8 +79,8 @@ func NewLog(appName string, cfg logConfig) *zap.SugaredLogger {
 	})
 
 	core := zapcore.NewTee(
-		zapcore.NewCore(zapcore.NewConsoleEncoder(encoderConfig), zapcore.AddSync(os.Stdout), loggerLevel),
-		zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&hook), loggerLevel),
+		zapcore.NewCore(zapcore.NewConsoleEncoder(consoleEncoderConfig), zapcore.AddSync(os.Stdout), loggerLevel),
+		zapcore.NewCore(zapcore.NewJSONEncoder(jsonEncoderConfig), zapcore.AddSync(&hook), loggerLevel),
 	)
 
 	fileds := zap.Fields(zap.String("app", appName))

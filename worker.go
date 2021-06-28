@@ -5,7 +5,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/goodking-bq/go-celery/message"
-	"log"
+	"github.com/goodking-bq/go-celery/queue"
+	"go.uber.org/zap"
 	"os"
 	"reflect"
 	"runtime"
@@ -19,11 +20,26 @@ type Worker struct {
 	workWG          sync.WaitGroup
 	rateLimitPeriod time.Duration
 	Concurrency     int `json:"concurrency"`
+	taskQueues      queue.Queues
+	taskRoutes      []string
 	tasks           sync.Map
 	// run funcs before run task
 	beforeRun []func()
 	// run after run task
 	afterRun []func()
+	// worker log
+	Log *zap.SugaredLogger
+}
+
+func NewWorker(app *Celery) *Worker {
+	worker := &Worker{
+		App:             app,
+		rateLimitPeriod: 1 * time.Second,
+		Concurrency:     app.Config.Concurrency,
+		tasks:           sync.Map{},
+		Log:             app.Log.With(zap.String("module", "worker")),
+	}
+	return worker
 }
 
 func (w *Worker) PrintInfo() {
@@ -55,6 +71,7 @@ func (w *Worker) PrintInfo() {
 func (w *Worker) StartWorker() {
 	w.PrintInfo()
 	w.StartWorkerWithContext(context.Background())
+	w.Log.Info("celery worker started.")
 }
 
 // StartWorkerWithContext starts celery worker(s) with given parent context
@@ -73,24 +90,27 @@ func (w *Worker) StartWorkerWithContext(ctx context.Context) {
 				case <-ticker.C:
 					// process task request
 					celeryMessage, err := w.App.Broker.GetMessage() // get celery message
-
 					if err != nil || celeryMessage == nil {
 						continue
 					}
-
+					w.Log.With(zap.Int("worker_id", workerID)).Infof("Received task: %s[%s]", celeryMessage.Task, celeryMessage.ID)
+					startTime := time.Now()
 					// run task
 					resultMsg, err := w.RunTask(celeryMessage)
 					if err != nil {
-						w.App.Log.Errorf("failed to run task message %s: %+v", celeryMessage.ID, err)
+						w.Log.With(zap.Int("worker_id", workerID)).Errorf("failed to run task message %s: %+v", celeryMessage.ID, err)
 						continue
 					}
+					w.Log.With(zap.Int("worker_id", workerID)).
+						Infof("Task %s[%s] succeeded in %fs: %+v", celeryMessage.Task,
+							celeryMessage.ID, time.Now().Sub(startTime).Seconds(), resultMsg.Result)
 					// push result to backend
 					err = w.App.Backend.SetResult(celeryMessage.ID, resultMsg)
-					message.ReleaseResultMessage(resultMsg)
 					if err != nil {
-						log.Printf("failed to push result: %+v", err)
+						w.Log.With(zap.Int("worker_id", workerID)).Errorf("failed to push result: %+v", err)
 						continue
 					}
+
 				}
 			}
 		}(i)
@@ -192,23 +212,6 @@ func runTask(task *Task, msg *message.TaskMessage) (crm *message.CeleryResultMes
 	}
 	crm = message.GetReflectionResultMessage(&res[0])
 	return
-}
-
-func recoverTask(t *message.TaskMessage, crm *message.CeleryResultMessage, err error) {
-	if r := recover(); r != nil {
-		var buf [4096]byte
-		var s bytes.Buffer
-		n := runtime.Stack(buf[:], false) //为什么一定要buf[:]
-		s.Write(buf[:n])
-		crm = message.GetResultMessage(r)
-		crm.Status = "FAILURE"
-		if t.Lang == "py" {
-			crm.Result = map[string]interface{}{"exc_type": "Exception", "exc_message": []string{fmt.Sprintf("%s", r)}, "exc_module": "runTask"}
-		} else {
-			crm.Result = fmt.Sprintf("%s", r)
-		}
-		crm.Traceback = fmt.Sprintf("%s", s.String())
-	}
 }
 
 // GetTask retrieves registered task
