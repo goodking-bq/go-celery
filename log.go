@@ -86,7 +86,6 @@ func NewLog(appName string, cfg logConfig) *zap.SugaredLogger {
 	fileds := zap.Fields(zap.String("app", appName))
 
 	logger := zap.New(core, zap.AddCaller(), fileds)
-
 	logger.Info("log inited.")
 	l := logger.Sugar()
 	defer logger.Sync()
