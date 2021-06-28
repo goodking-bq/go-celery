@@ -7,3 +7,9 @@ log:
   path: ./logs
   file: celery
   level: info
+task_queues:
+  - name: add
+    exchange:
+      name: add
+      type: direct
+    routing_key: add

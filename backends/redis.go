@@ -50,6 +50,7 @@ func (cb *RedisBackend) GetResult(taskID string) (*message.CeleryResultMessage, 
 
 // SetResult pushes result back into redis backend
 func (cb *RedisBackend) SetResult(taskID string, result *message.CeleryResultMessage) error {
+	defer message.ReleaseResultMessage(result)
 	result.TaskId = taskID
 	resBytes, err := json.Marshal(result)
 	if err != nil {

@@ -8,28 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/goodking-bq/go-celery/message"
+	"github.com/goodking-bq/go-celery/queue"
 	"time"
 
 	"github.com/streadway/amqp"
 )
-
-// AMQPExchange stores AMQP Exchange configuration
-type AMQPExchange struct {
-	Name       string
-	Type       string
-	Durable    bool
-	AutoDelete bool
-}
-
-// NewAMQPExchange creates new AMQPExchange
-func NewAMQPExchange(name string) *AMQPExchange {
-	return &AMQPExchange{
-		Name:       name,
-		Type:       "direct",
-		Durable:    true,
-		AutoDelete: true,
-	}
-}
 
 // AMQPQueue stores AMQP Queue configuration
 type AMQPQueue struct {
@@ -51,7 +34,7 @@ func NewAMQPQueue(name string) *AMQPQueue {
 type AMQPBroker struct {
 	*amqp.Channel
 	Connection       *amqp.Connection
-	Exchange         *AMQPExchange
+	Exchange         *queue.Exchange
 	Queue            *AMQPQueue
 	consumingChannel <-chan amqp.Delivery
 	Rate             int
@@ -86,7 +69,7 @@ func NewAMQPBrokerByConnAndChannel(conn *amqp.Connection, channel *amqp.Channel)
 	broker := &AMQPBroker{
 		Channel:      channel,
 		Connection:   conn,
-		Exchange:     NewAMQPExchange("default"),
+		Exchange:     &queue.Exchange{Name: "default"},
 		Queue:        NewAMQPQueue("celery"),
 		Rate:         4,
 		taskProtocol: 2,
@@ -199,7 +182,7 @@ func (b *AMQPBroker) GetMessage() (*message.TaskMessage, error) {
 func (b *AMQPBroker) CreateExchange() error {
 	return b.ExchangeDeclare(
 		b.Exchange.Name,
-		b.Exchange.Type,
+		string(b.Exchange.Type),
 		b.Exchange.Durable,
 		b.Exchange.AutoDelete,
 		false,
