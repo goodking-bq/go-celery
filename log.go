@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	L        *zap.SugaredLogger
+	l        *zap.SugaredLogger
 	levelMap = map[string]zapcore.Level{
 		"debug":  zapcore.DebugLevel,
 		"info":   zapcore.InfoLevel,
@@ -62,7 +62,7 @@ func toLevel(lev string) zapcore.Level {
 	return zapcore.InfoLevel
 }
 
-func NewLog(appName string, cfg logConfig) *zap.SugaredLogger {
+func newLog(appName string, cfg logConfig) *zap.SugaredLogger {
 	fileName := path.Join(cfg.Path, cfg.File)
 	hook := lumberjack.Logger{
 		Filename:   fileName,
@@ -92,6 +92,7 @@ func NewLog(appName string, cfg logConfig) *zap.SugaredLogger {
 	return l
 }
 
-func GetLogger() *zap.SugaredLogger {
-	return L
+// GetLogger if you want log something, use it
+func GetLogger(name string) *zap.SugaredLogger {
+	return l.Named(name)
 }

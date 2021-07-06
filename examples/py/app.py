@@ -1,3 +1,5 @@
+import datetime
+
 from celery import Celery
 from kombu import Exchange, Queue
 
@@ -27,6 +29,8 @@ if __name__ == '__main__':
     t = add.apply_async(args=(1,), kwargs={"b": 2878}, serializer='json',
                         delay=10,
                         max_retries=10,
+                        countdown=10,
+                        expires=datetime.datetime.now(),
                         route_name="schedule")
     # print(t.status)
     # t.wait()

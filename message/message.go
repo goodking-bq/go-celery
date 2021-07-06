@@ -5,6 +5,7 @@ import (
 	"fmt"
 	uuid "github.com/satori/go.uuid"
 	"log"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -96,15 +97,10 @@ func (cm CeleryMessage) GetTaskMessage() *TaskMessage {
 		return nil
 	}
 	taskMessage := GetTaskMessage()
-	var decodeFun func(body string, message *TaskMessage) error
-	if len(cm.Headers) == 0 {
-		decodeFun = DecodeMessageBodyV1
-	} else {
-		decodeFun = DecodeMessageBodyV2
-		b, _ := json.Marshal(cm.Headers)
-		_ = json.Unmarshal(b, taskMessage)
-	}
-	if err := decodeFun(cm.Body, taskMessage); err != nil {
+	b, _ := json.Marshal(cm.Headers)
+	_ = json.Unmarshal(b, taskMessage)
+
+	if err := DecodeMessageBody(cm.Body, taskMessage); err != nil {
 		log.Println("failed to decode task message")
 		return nil
 	}
@@ -112,21 +108,8 @@ func (cm CeleryMessage) GetTaskMessage() *TaskMessage {
 
 }
 
-// DecodeMessageBodyV1 decodes base64 encrypted body and return TaskMessage object for celery protocol 1
-func DecodeMessageBodyV1(encodedBody string, msg *TaskMessage) error {
-	err := json.Unmarshal([]byte(encodedBody), msg)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func EncodeMessageBodyV1(task *TaskMessage) (body string, err error) {
-	return "", nil
-}
-
-// DecodeMessageBodyV2 decodes base64 encrypted body and return TaskMessage object for celery protocol 2
-func DecodeMessageBodyV2(encodedBody string, msg *TaskMessage) error {
+// DecodeMessageBody decodes base64 encrypted body and return TaskMessage object for celery protocol 2
+func DecodeMessageBody(encodedBody string, msg *TaskMessage) error {
 	var bodyTemp []interface{}
 	if err := json.Unmarshal([]byte(encodedBody), &bodyTemp); err != nil {
 		return err
@@ -137,7 +120,7 @@ func DecodeMessageBodyV2(encodedBody string, msg *TaskMessage) error {
 	return nil
 }
 
-func EncodeMessageBodyV2(task *TaskMessage) (body string, err error) {
+func EncodeMessageBody(task *TaskMessage) (body string, err error) {
 	b := make([]interface{}, 3)
 	b[0] = task.Args
 	b[1] = task.Kwargs
@@ -290,14 +273,16 @@ func (r *AsyncResult) Result() interface{} {
 
 // TaskMessage is celery-compatible message
 type TaskMessage struct {
-	ID      string                 `json:"id"`
-	Task    string                 `json:"task"`
-	Args    []interface{}          `json:"args"`
-	Kwargs  map[string]interface{} `json:"kwargs"`
-	Retries int                    `json:"retries"`
-	ETA     *string                `json:"eta"`
-	Expires *CeleryTime            `json:"expires"`
-	Lang    string                 `json:"lang"`
+	ID           string                 `json:"id"`
+	Task         string                 `json:"task"`
+	Args         []interface{}          `json:"argsrepr"`
+	Kwargs       map[string]interface{} `json:"kwargsrepr"`
+	Retries      int                    `json:"retries"`
+	ETA          *string                `json:"eta"`
+	Expires      *CeleryTime            `json:"expires"`
+	Lang         string                 `json:"lang"`
+	IgnoreResult bool                   `json:"ignore_result"`
+	Origin       string                 `json:"origin"`
 }
 
 func (tm *TaskMessage) reset() {
@@ -315,13 +300,17 @@ func (tm *TaskMessage) ToHeader() (res map[string]interface{}) {
 
 var taskMessagePool = sync.Pool{
 	New: func() interface{} {
-		eta := time.Now().Format(time.RFC3339)
+		origin, _ := os.Hostname()
 		return &TaskMessage{
-			ID:      uuid.Must(uuid.NewV4()).String(),
-			Retries: 0,
-			Kwargs:  nil,
-			ETA:     &eta,
-			Lang:    "golang",
+			ID:           uuid.Must(uuid.NewV4()).String(),
+			Retries:      0,
+			Kwargs:       nil,
+			Args:         nil,
+			ETA:          nil,
+			Expires:      nil,
+			Lang:         "golang",
+			Origin:       origin,
+			IgnoreResult: false,
 		}
 	},
 }

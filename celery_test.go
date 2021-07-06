@@ -34,7 +34,7 @@ func newApp() *Celery {
 }
 func TestNewCeleryWithConfigFile(t *testing.T) {
 	app := newApp()
-	app.StartWorkerForever()
+	app.StartWorker()
 }
 
 func TestCelery_Delay(t *testing.T) {

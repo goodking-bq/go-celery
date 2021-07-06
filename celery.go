@@ -27,7 +27,7 @@ type Celery struct {
 
 // NewCelery create celery app
 func NewCelery(config *Config) (*Celery, error) {
-	logger := NewLog(config.Name, config.Log)
+	logger := newLog(config.Name, config.Log)
 	broker, err := brokers.NewBroker(config.BrokerUrl, config.Queues)
 	if err != nil {
 		return nil, err
@@ -87,10 +87,6 @@ func (c *Celery) RegisterFunc(name string, f interface{}) {
 	c.worker.Register(task)
 }
 
-type Delayer interface {
-	apply(t *message.TaskMessage, op *TaskOptions)
-}
-
 // Delay call task
 func (c *Celery) Delay(name string, fs ...Delayer) (*message.AsyncResult, error) {
 	task := message.GetTaskMessage()
@@ -104,15 +100,9 @@ func (c *Celery) Delay(name string, fs ...Delayer) (*message.AsyncResult, error)
 
 func (c *Celery) delay(task *message.TaskMessage, options *TaskOptions) (*message.AsyncResult, error) {
 	defer message.ReleaseTaskMessage(task)
-	var encodeFun func(taskMessage *message.TaskMessage) (string, error)
 	celeryMessage := message.GetCeleryMessage("")
-	if c.Config.TaskProtocol == 1 {
-		encodeFun = message.EncodeMessageBodyV1
-	} else {
-		encodeFun = message.EncodeMessageBodyV2
-		celeryMessage.Headers = task.ToHeader()
-	}
-	body, err := encodeFun(task)
+	celeryMessage.Headers = task.ToHeader()
+	body, err := message.EncodeMessageBody(task)
 	if err != nil {
 		return nil, err
 	}
@@ -133,13 +123,13 @@ func (c *Celery) StartWorkerWithContext(ctx context.Context) {
 	c.worker.StartWorkerWithContext(ctx)
 }
 
-// StartWorker starts celery workers
-func (c *Celery) StartWorker() {
+// startWorker starts celery workers
+func (c *Celery) startWorker() {
 	c.worker.StartWorker()
 }
 
-// StartWorkerForever starts celery workers forever
-func (c *Celery) StartWorkerForever() {
+// StartWorker starts celery workers forever
+func (c *Celery) StartWorker() {
 	c.worker.StartWorker()
 	forever := make(chan bool)
 	<-forever
@@ -158,6 +148,7 @@ func (c *Celery) Register(tasks ...*Task) {
 	}
 }
 
+//SetQueues set custom queues
 func (c *Celery) SetQueues(queue amqp.Queue) {
 
 }

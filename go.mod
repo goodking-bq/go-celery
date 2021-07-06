@@ -10,11 +10,9 @@ require (
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b
 	github.com/spf13/viper v1.8.0
 	github.com/streadway/amqp v1.0.0
-	github.com/yuin/goldmark v1.3.8 // indirect
 	go.uber.org/zap v1.17.0
-	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
 	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22 // indirect
-	golang.org/x/tools v0.1.4 // indirect
+	golang.org/x/text v0.3.6 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
